@@ -1,1 +1,2 @@
-# GRN_Inference_IY
+# Gene Regulatory Network (GRN) Inference Project
+
