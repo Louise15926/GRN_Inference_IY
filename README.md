@@ -13,5 +13,7 @@ We attempt to infer gene regulatory networks by treating it as a feature selecti
 ## Evaluation Metrics
 ### Intersection Over Union (IOU)
 Using IOU, we are able to swiftly score how well our inference method by having the proportion of intersection over union between the predicted edges and gold-standard edges.
+<br>
 (Insert Venn Diagram Image here)
+<br>
 In the case of a perfect prediction, the prediction set and the gold-standard edges are completely overlapping. In the other hand, with the case of entirely incorrect prediction, there is no intersection between predicted edges and gold-standard edges.
