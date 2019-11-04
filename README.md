@@ -28,6 +28,7 @@ For next steps:
 Inference Methods:
 - Setting hyperparameters for Lasso
 - Other non-linear methods such as regression trees
+- Hyperparameter search for both lasso and regression trees.
 
 Evaluation:
 - IOU with statistical adjustment (Probability of seeing IOU with the case of random adjustment)
