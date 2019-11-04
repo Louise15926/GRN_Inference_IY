@@ -10,6 +10,11 @@ We attempt to infer gene regulatory networks by treating it as a feature selecti
 2. Use Lasso Regression method to predict y based on X.
 3. Get predictor genes in X that has non-zero weight in the model
 
+### Regression Forest
+Like Lasso, we also treat grn inference as a feature selection problem:
+1. Treat each gene as target (y) and all other genes as predictors (X).
+2. Use Regression Forrest method to predict y based on X.
+3. Get predictor genes in X that has non-zero feature importance
 ## Evaluation Metrics
 ### Intersection Over Union (IOU)
 Using IOU, we are able to swiftly score how well our inference method by having the proportion of intersection over union between the predicted edges and gold-standard edges.
