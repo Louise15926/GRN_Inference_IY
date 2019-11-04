@@ -23,8 +23,7 @@ Using IOU, we are able to swiftly score how well our inference method by having 
 <br>
 In the case of a perfect prediction, the prediction set and the gold-standard edges are completely overlapping. In the case of entirely incorrect prediction, there is no intersection between predicted edges and gold-standard edges.
 
-## Notes:
-For next steps:
+## Notes for next steps:
 Inference Methods:
 - Setting hyperparameters for Lasso
 - Other non-linear methods such as regression trees
