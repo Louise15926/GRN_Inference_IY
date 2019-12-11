@@ -282,6 +282,31 @@ def generate_auroc(actual_edges, pred_score, title):
     
     return auc_score
 
+# Score using PR Curve
+from sklearn.metrics import precision_recall_curve, average_precision_score
+def generate_aupr(actual_edges, pred_score, title):
+    precision, recall, ths = precision_recall_curve(actual_edges, pred_score, pos_label = 1)
+    
+    auc_score = auc(recall, precision)
+
+    # ratio of the positive class (used to plot no-skill line)
+    positive_ratio = float(sum(actual_edges)) / actual_edges.size
+
+    fig = plt.figure(figsize=(10,10))
+    plt.plot(recall, precision, color = 'darkorange', lw = 2, label = f'PR Curve, AUC = {auc_score}')
+    plt.plot([0, 1], [positive_ratio, positive_ratio], color = 'navy', linestyle = '--', label = 'No Skill')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.title(title)
+    plt.legend(loc="lower right")
+    plt.show()
+
+    print(f'average precision score: {average_precision_score(actual_edges, pred_score)}')
+
+    return auc_score, 
+
 # Sound alert after code is finished!
 from IPython.display import Audio, display
 def FinallyItIsDone():
