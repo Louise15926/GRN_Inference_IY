@@ -9,7 +9,7 @@ import numpy as np
 
 ########################################################################################################################################
 # GRN PREPARATION METHODS
-########################################################################################################################################
+# #######################################################################################################################################
 
 def prep_dataset(target_gene, tf_list, exp_df):
     '''
@@ -114,9 +114,37 @@ def populate_actual_column(pe_df, gold_df):
 
     return pe_df
 
+def merge_dataset(df_list, merge_method, index_name=None):
+    '''
+    Merge a list of data frames and return a merged data frame
+    
+    Args:
+        - df_list (required): list of data frames to merge
+        - merge_method (required): a function that merges two data frames (see example below)
+        - index_name (optional): index_name for the returned data frame
+    
+    Example Usage:
+        merge_method_df = lambda x, y: x.merge(y, how='inner', left_index=True, right_index=True) # define merge_method
+        df_all = merge_dataset([ko_df, nv_df, stress_df], merge_method=merge_method_df, index_name='Gene')
+        
+        merge_method_tf = lambda x, y: x.merge(y, how='inner', left_on='TF', right_on='TF')
+        tf_all = merge_dataset([ko_tf, nv_tf, stress_tf], merge_method=merge_method_tf)
+    '''
+
+    if len(df_list) == 0: raise Exception("input list cannot be empty")
+
+    df = df_list[0]
+    for i in range(1, len(df_list)):
+        df = merge_method(df, df_list[i])
+
+    if index_name:
+        df.index.name = index_name
+
+    return df
+
 ########################################################################################################################################
 # GRN PREDICTION METHODS
-########################################################################################################################################
+# #######################################################################################################################################
 
 def grn_lasso(target_gene, tf_list, exp_df, **kwargs):
     '''
@@ -218,7 +246,7 @@ def grn_svr(target_gene, tf_list, exp_df, **kwargs):
 
 ########################################################################################################################################
 # EVALUATION METHODS
-########################################################################################################################################
+# #######################################################################################################################################
 
 # Score using ROC Curve
 from sklearn.metrics import auc, roc_curve
