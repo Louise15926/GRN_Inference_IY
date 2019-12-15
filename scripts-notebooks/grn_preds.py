@@ -3,9 +3,10 @@ from sklearn.linear_model import Lasso, LassoCV
 from sklearn.metrics import mean_squared_error
 from sklearn.ensemble import RandomForestRegressor
 from sklearn import model_selection
-from sklearn.svm import SVR
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import cross_val_score
+from sklearn.svm import LinearSVR
 
 ########################################################################################################################################
 # GRN PREPARATION METHODS
@@ -35,9 +36,10 @@ def prep_dataset(target_gene, tf_list, exp_df):
     X = X.values.transpose()
     
     # Split 80:20 for test and train
-    X_train, X_test, y_train, y_test = model_selection.train_test_split(X, y, test_size = 0.2)
+    X_train, X_test, y_train, y_test = model_selection.train_test_split(X, y, test_size = 0.001)
 
-    return X_train, X_test, y_train, y_test, X_label
+    # return X_train, X_test, y_train, y_test, X_label
+    return X, y, X_label
 
 # Generate gold dataset / gold truth vector
 def generate_gold_dataset(gold_file_list):
@@ -73,7 +75,7 @@ def generate_possible_edges(tf_list, exp_df):
     actual will be a binary vector, with entries either 0 or 1, depending if they are present in the gold truth file    
     '''
     
-    pe_df = pd.DataFrame({"Actual": [], "Predicted score": []})
+    pe_df = pd.DataFrame()
     
     pos_edges = []
     targets = []
@@ -87,7 +89,7 @@ def generate_possible_edges(tf_list, exp_df):
                 tfs.append(tf)
                 
     pe_df.loc[:, 'Actual'] = np.zeros(len(pos_edges))
-    pe_df.loc[:, 'Predicted score'] = np.zeros(len(pos_edges))
+    pe_df.loc[:, 'Uniform score'] = np.repeat(0.5, len(pos_edges)) 
     pe_df.loc[:, 'TF'] = tfs
     pe_df.loc[:, 'Target'] = targets
     
@@ -160,11 +162,11 @@ def grn_lasso(target_gene, tf_list, exp_df, **kwargs):
         - Numpy array of type str, with list of non-zero weight predictors
     '''
     # Prep data
-    X_train, X_test, y_train, y_test, X_label = prep_dataset(target_gene, tf_list, exp_df)
+    X, y, X_label = prep_dataset(target_gene, tf_list, exp_df)
     
     # Use Lasso regression
     lasso_reg = LassoCV(alphas=kwargs['alphas'], cv=kwargs['cv'])
-    lasso_reg.fit(X_train, y_train)
+    lasso_reg.fit(X, y)
     
     # Get scores (R^2)
     # train_score = lasso_reg.score(X_train, y_train) # Note: R^2 not very good, maybe use other methods
@@ -191,25 +193,21 @@ def grn_regforest(target_gene, tf_list, exp_df, **kwargs):
         
     '''
     # Prep data
-    X_train, X_test, y_train, y_test, X_label = prep_dataset(target_gene, tf_list, exp_df)
+    X, y, X_label = prep_dataset(target_gene, tf_list, exp_df)
     
     # Use regerssion tree
     forest_reg = RandomForestRegressor(n_estimators=kwargs['n_estimators'], max_depth=kwargs['max_depth'], bootstrap=kwargs['bootstrap'],
      min_samples_leaf=kwargs['min_samples_leaf'], n_jobs=kwargs['n_jobs'])
-    
-    forest_reg.fit(X_train, y_train)
-    
-    # Get Scores (R^2)
-    # train_score = forest_reg.score(X_train, y_train)
-    # test_score = forest_reg.score(X_test, y_test)
+    forest_reg.fit(X, y)
 
     # Get feature importance and corresponding labels
     edges = X_label + '->' + target_gene
     return edges, forest_reg.feature_importances_
 
-def grn_svr(target_gene, tf_list, exp_df, **kwargs):
+def grn_linear_svr(target_gene, tf_list, exp_df, **kwargs):
     '''
-    GRN inference method using Supprt Vector Regression.
+    GRN inference method using Supprt Vector Regression, linear kernel.
+    Hyperparameter to be optimized are C and epsilon
 
     Args:
         - target_gene: target gene for the iteration (y)
@@ -220,31 +218,85 @@ def grn_svr(target_gene, tf_list, exp_df, **kwargs):
     Returns:
        - Numpy array of type str, with list of non-zero weight predictors
     '''
+    
     # Prep data
-    X_train, X_test, y_train, y_test, X_label = prep_dataset(target_gene, tf_list, exp_df)
-
-    # Use SVR
-    SVR_reg = SVR(kernel=kwargs['kernel'])
-    SVR_reg.fit(X_train, y_train)
-
-    # Get Scores (R^2)
-    # train_score = SVR_reg.score(X_train, y_train)
-    # test_score = SVR_reg.score(X_test, y_test)
-
-    # Get weights
+    X, y, X_label =     prep_dataset(target_gene, tf_list, exp_df)
+    
+    # List candidates C and epsilon
+    Cs = [0.01, 0.1, 1, 10, 100]
+    epsilons = [0, 0.01, 0.1, 1, 10]
+    
+    # Get tuples of all possible combinations
+    C_eps_list = []
+    for C in Cs:
+        for eps in epsilons:
+            C_eps_list.append((C, eps))
+    
+    
+    # Get cross validation scores
+    C_eps_mean_score = []
+    for C_eps_tup in C_eps_list:
+        curr_C = C_eps_tup[0]
+        curr_eps = C_eps_tup[1]
+        
+        svr_reg = LinearSVR(epsilon = curr_eps, C = curr_C)
+        svr_reg_scores = cross_val_score(svr_reg, X, y, cv = 5)
+        C_eps_mean_score.append(np.mean(svr_reg_scores))
+    
+    # Get argmax of validation score, and choose that as hyperparam, then get weights
+    best_C_eps = C_eps_list[np.argmax(C_eps_mean_score)]
+    svr_reg_best = LinearSVR(epsilon = best_C_eps[1], C = best_C_eps[0])
+    svr_reg_best.fit(X, y)
+    
+    # Get weights and edges
+    weights = svr_reg_best.coef_
     edges = X_label + '->' + target_gene
-
-    # Coefs conditions
-    coef = ''
-    if kwargs['kernel'] == 'linear':
-        coef = SVR_reg.coef_[0]
-    else:
-        coef = SVR_reg.dual_coef_
-
-    return edges, coef
+    
+    return edges, weights
 
 
-########################################################################################################################################
+#########################################################################################################################################
+# Standardize scores
+# #######################################################################################################################################
+
+from sklearn.preprocessing import StandardScaler
+
+def standardize_scores(target_gene, scores_df, method_name):
+    '''
+    Function for standardizing weights per target gene. Ignore zero entries, normalize others
+    
+    Args:
+        - target_gene: name of target gene (string)
+        - scores_df: scores df
+        - method_name: method of prediction
+        
+    Returns:
+        - tuple with ([index names], [noramlized scores])
+    '''
+    
+    # Filtered by target and specific method column
+    filtered_df = scores_df[scores_df.loc[:, 'Target'] == target_gene].loc[:, [f'{method_name} scores']]
+    
+    # Get nonzero values only
+    nonzero_df = filtered_df[filtered_df.loc[:, f'{method_name} scores'] != 0]
+    
+    if len(nonzero_df) == 0:
+        return filtered_df.index, np.repeat(0, len(filtered_df))
+
+    # Normalize these values, so it has mean of 0 and standard deviation of 1
+    stand_scores = StandardScaler().fit_transform(nonzero_df.loc[:, f'{method_name} scores'].values.reshape(len(nonzero_df), 1))
+    
+    # Add the standardized column to filtered df
+    filtered_df.loc[:, f'Standardized {method_name} scores'] = 0
+    filtered_df.loc[nonzero_df.index, f'Standardized {method_name} scores'] = stand_scores
+    
+    # Target gene index, normalized score
+    target_gene_index = filtered_df.loc[nonzero_df.index, f'Standardized {method_name} scores'].index
+    stand_scores_values = filtered_df.loc[nonzero_df.index, f'Standardized {method_name} scores'].values
+
+    return target_gene_index, stand_scores_values
+
+#########################################################################################################################################
 # EVALUATION METHODS
 # #######################################################################################################################################
 
@@ -252,7 +304,7 @@ def grn_svr(target_gene, tf_list, exp_df, **kwargs):
 from sklearn.metrics import auc, roc_curve
 import matplotlib.pyplot as plt
 
-def generate_auroc(actual_edges, pred_score, title):
+def generate_auroc(actual_edges, pred_score, title='', show=True):
     '''
     Evaluation metrics 2: Instead of using intersection over union, we can use ROC curve, since we have the scores for each edge and truth value for each edge
     
@@ -278,13 +330,15 @@ def generate_auroc(actual_edges, pred_score, title):
     plt.ylabel('True Positive Rate')
     plt.title(title)
     plt.legend(loc="lower right")
-    plt.show()
+
+    if show:
+        plt.show()
     
     return auc_score
 
 # Score using PR Curve
 from sklearn.metrics import precision_recall_curve, average_precision_score
-def generate_aupr(actual_edges, pred_score, title):
+def generate_auprc(actual_edges, pred_score, title='', show=True):
     precision, recall, ths = precision_recall_curve(actual_edges, pred_score, pos_label = 1)
     
     auc_score = auc(recall, precision)
@@ -301,11 +355,12 @@ def generate_aupr(actual_edges, pred_score, title):
     plt.ylabel('Precision')
     plt.title(title)
     plt.legend(loc="lower right")
-    plt.show()
 
-    print(f'average precision score: {average_precision_score(actual_edges, pred_score)}')
+    if show:
+        plt.show()
+        print(f'average precision score: {average_precision_score(actual_edges, pred_score)}')
 
-    return auc_score, 
+    return auc_score
 
 # Sound alert after code is finished!
 from IPython.display import Audio, display
